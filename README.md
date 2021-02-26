@@ -1,5 +1,9 @@
-$ python setup.py install
-Then look at example.py
+Installation:
+
+	$ cd boolcolumn
+	$ python setup.py install
+
+Then look at example.py, e.g.:
 
 	# mats must be a batch_size x nrows x ncols matrix
 	import boolcolumn_cuda
