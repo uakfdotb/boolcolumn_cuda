@@ -5,7 +5,7 @@
 
 #include <vector>
 
-#define block_size 32
+#define block_size 16
 
 // compute the output at one output row/col
 // to do so, we need to sum over the product of the corresponding input rows
@@ -17,12 +17,13 @@ __global__ void matmul_viterbi_cuda_forward_kernel(
 	int64_t* __restrict__ max_indices,
 	size_t sz1,
 	size_t sz2,
-	size_t sz3) {
+	size_t sz3,
+	size_t batch_size) {
 
 	const int64_t out_row = blockIdx.x * block_size + threadIdx.x;
 	const int64_t out_col = blockIdx.y * block_size + threadIdx.y;
 	const int64_t batch = blockIdx.z;
-	if(out_row < sz1 && out_col < sz3) {
+	if(out_row < sz1 && out_col < sz3 && batch < batch_size) {
 		scalar_t sum = 0;
 		int64_t src = 0;
 		for(int64_t k = 0; k < sz2; k++) {
@@ -66,7 +67,8 @@ std::vector<torch::Tensor> matmul_viterbi_cuda_forward(
 			max_indices.data<int64_t>(),
 			sz1,
 			sz2,
-			sz3
+			sz3,
+			batch_size
 		);
 	}));
 	return {output, max_indices};
@@ -82,12 +84,13 @@ __global__ void matmul_viterbi_a_cuda_backward_kernel(
 	scalar_t* __restrict__ d_a,
 	size_t sz1,
 	size_t sz2,
-	size_t sz3) {
+	size_t sz3,
+	size_t batch_size) {
 
 	const int64_t row = blockIdx.x * block_size + threadIdx.x;
 	const int64_t col = blockIdx.y * block_size + threadIdx.y;
 	const int64_t batch = blockIdx.z;
-	if(row < sz1 && col < sz2) {
+	if(row < sz1 && col < sz2 && batch < batch_size) {
 		// we're at a[row, col], so each out[row, k] could potentially depend on us
 		scalar_t sum = 0;
 		for(int k = 0; k < sz3; k++) {
@@ -110,12 +113,13 @@ __global__ void matmul_viterbi_b_cuda_backward_kernel(
 	scalar_t* __restrict__ d_b,
 	size_t sz1,
 	size_t sz2,
-	size_t sz3) {
+	size_t sz3,
+	size_t batch_size) {
 
 	const int64_t row = blockIdx.x * block_size + threadIdx.x;
 	const int64_t col = blockIdx.y * block_size + threadIdx.y;
 	const int64_t batch = blockIdx.z;
-	if(row < sz2 && col < sz3) {
+	if(row < sz2 && col < sz3 && batch < batch_size) {
 		// we're at b[row, col], so each out[k, col] could potentially depend on us
 		scalar_t sum = 0;
 		for(int k = 0; k < sz1; k++) {
@@ -158,7 +162,8 @@ std::vector<torch::Tensor> matmul_viterbi_cuda_backward(
 			d_a.data<scalar_t>(),
 			sz1,
 			sz2,
-			sz3
+			sz3,
+			batch_size
 		);
 	}));
 	AT_DISPATCH_FLOATING_TYPES(a.type(), "matmul_viterbi_b_backward_cuda", ([&] {
@@ -171,7 +176,8 @@ std::vector<torch::Tensor> matmul_viterbi_cuda_backward(
 			d_b.data<scalar_t>(),
 			sz1,
 			sz2,
-			sz3
+			sz3,
+			batch_size
 		);
 	}));
 	return {d_a, d_b};
